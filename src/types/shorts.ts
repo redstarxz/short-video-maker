@@ -32,8 +32,10 @@ export type Scene = {
 
 export const sceneInput = z.object({
   text: z.string().describe("Text to be spoken in the video"),
-  searchTerms: z
-    .array(z.string())
+  audio_url: z.string().nullish().describe("audio to be spoken in the video, empty means silent"),
+  audio_length: z.number().nullish().describe("audio lenght sec"),
+  video_url: z.string().describe("video url for the scene"),
+  searchTerms: z.array(z.string())
     .describe(
       "Search term for video, 1 word, and at least 2-3 search terms should be provided for each scene. Make sure to match the overall context with the word - regardless what the video search result would be.",
     ),

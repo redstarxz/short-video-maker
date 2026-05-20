@@ -6,11 +6,9 @@ import path from "path";
 import https from "https";
 import http from "http";
 
-import { Kokoro } from "./libraries/Kokoro";
 import { Remotion } from "./libraries/Remotion";
-import { Whisper } from "./libraries/Whisper";
 import { FFMpeg } from "./libraries/FFmpeg";
-import { PexelsAPI } from "./libraries/Pexels";
+import { AzureSpeechToText } from "./libraries/AzureSpeechToText";
 import { Config } from "../config";
 import { logger } from "../logger";
 import { MusicManager } from "./music";
@@ -30,15 +28,16 @@ export class ShortCreator {
     config: RenderConfig;
     id: string;
   }[] = [];
+  private azureSpeechToText: AzureSpeechToText;
+
   constructor(
     private config: Config,
     private remotion: Remotion,
-    private kokoro: Kokoro,
-    private whisper: Whisper,
     private ffmpeg: FFMpeg,
-    private pexelsApi: PexelsAPI,
     private musicManager: MusicManager,
-  ) {}
+  ) {
+    this.azureSpeechToText = new AzureSpeechToText(config);
+  }
 
   public status(id: string): VideoStatus {
     const videoPath = this.getVideoPath(id);
@@ -100,7 +99,6 @@ export class ShortCreator {
     );
     const scenes: Scene[] = [];
     let totalDuration = 0;
-    const excludeVideoIds = [];
     const tempFiles = [];
 
     const orientation: OrientationEnum =
@@ -108,48 +106,30 @@ export class ShortCreator {
 
     let index = 0;
     for (const scene of inputScenes) {
-      const audio = await this.kokoro.generate(
-        scene.text,
-        config.voice ?? "af_heart",
-      );
-      let { audioLength } = audio;
-      const { audio: audioStream } = audio;
-
-      // add the paddingBack in seconds to the last scene
-      if (index + 1 === inputScenes.length && config.paddingBack) {
-        audioLength += config.paddingBack / 1000;
-      }
+      const audio_url = scene.audio_url;
 
       const tempId = cuid();
       const tempWavFileName = `${tempId}.wav`;
-      const tempMp3FileName = `${tempId}.mp3`;
       const tempVideoFileName = `${tempId}.mp4`;
       const tempWavPath = path.join(this.config.tempDirPath, tempWavFileName);
-      const tempMp3Path = path.join(this.config.tempDirPath, tempMp3FileName);
+
       const tempVideoPath = path.join(
         this.config.tempDirPath,
         tempVideoFileName,
       );
       tempFiles.push(tempVideoPath);
-      tempFiles.push(tempWavPath, tempMp3Path);
+      tempFiles.push(tempWavPath);
 
-      await this.ffmpeg.saveNormalizedAudio(audioStream, tempWavPath);
-      const captions = await this.whisper.CreateCaption(tempWavPath);
+      //使用传入的 video_url 下载视频
+      const videoUrl = scene.video_url;
 
-      await this.ffmpeg.saveToMp3(audioStream, tempMp3Path);
-      const video = await this.pexelsApi.findVideo(
-        scene.searchTerms,
-        audioLength,
-        excludeVideoIds,
-        orientation,
-      );
-
-      logger.debug(`Downloading video from ${video.url} to ${tempVideoPath}`);
+      logger.debug(`Downloading video from ${videoUrl} to ${tempVideoPath}`);
 
       await new Promise<void>((resolve, reject) => {
         const fileStream = fs.createWriteStream(tempVideoPath);
-        https
-          .get(video.url, (response: http.IncomingMessage) => {
+        const protocol = videoUrl.startsWith("https:") ? https : http;
+        protocol
+          .get(videoUrl, (response: http.IncomingMessage) => {
             if (response.statusCode !== 200) {
               reject(
                 new Error(`Failed to download video: ${response.statusCode}`),
@@ -172,18 +152,40 @@ export class ShortCreator {
           });
       });
 
-      excludeVideoIds.push(video.id);
+      let audioLength: number;
+      let captions: import("../types/shorts").Caption[];
+
+      if (audio_url) {
+        // Download audio from URL and save to wav for caption generation, get duration
+        const audioResult = await this.ffmpeg.saveNormalizedAudioFromUrl(audio_url, tempWavPath);
+        audioLength = audioResult.duration;
+        console.log(`Audio length is ${audioLength}`);
+        // 改为调用微软分词
+        captions = await this.azureSpeechToText.CreateCaption(tempWavPath);
+      } else {
+        // No audio: use video duration and generate silence
+        const videoDuration = await this.ffmpeg.getVideoDuration(tempVideoPath);
+        audioLength = videoDuration;
+        await this.ffmpeg.generateSilence(videoDuration, tempWavPath);
+        captions = [];
+        console.log(`No audio_url, using video duration ${videoDuration}s as silence`);
+      }
+
+      // add the paddingBack in seconds to the last scene
+      const adjustedAudioLength = index + 1 === inputScenes.length && config.paddingBack
+        ? audioLength + config.paddingBack / 1000
+        : audioLength;
 
       scenes.push({
         captions,
         video: `http://localhost:${this.config.port}/api/tmp/${tempVideoFileName}`,
         audio: {
-          url: `http://localhost:${this.config.port}/api/tmp/${tempMp3FileName}`,
-          duration: audioLength,
+          url: `http://localhost:${this.config.port}/api/tmp/${tempWavFileName}`,
+          duration: adjustedAudioLength,
         },
       });
 
-      totalDuration += audioLength;
+      totalDuration += adjustedAudioLength;
       index++;
     }
     if (config.paddingBack) {
@@ -292,6 +294,7 @@ export class ShortCreator {
   }
 
   public ListAvailableVoices(): string[] {
-    return this.kokoro.listAvailableVoices();
+    // Azure Speech to Text doesn't have a voices list - return empty array
+    return [];
   }
 }

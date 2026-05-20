@@ -7,7 +7,7 @@ import {
   OffthreadVideo,
 } from "remotion";
 import { z } from "zod";
-import { loadFont } from "@remotion/google-fonts/BarlowCondensed";
+import { loadFont } from "@remotion/google-fonts/NotoSansSC";
 
 import {
   calculateVolume,
@@ -111,17 +111,17 @@ export const LandscapeVideo: React.FC<z.infer<typeof shortVideoSchema>> = ({
                       return (
                         <p
                           style={{
-                            fontSize: "8em",
+                            fontSize: "5em",
                             fontFamily: fontFamily,
-                            fontWeight: "black",
-                            color: "white",
-                            WebkitTextStroke: "2px black",
+                            fontWeight: "bold",
+                            WebkitTextStroke: "1px rgba(0,0,0,0.5)",
                             WebkitTextFillColor: "white",
-                            textShadow: "0px 0px 10px black",
+                            textShadow: "2px 2px 6px rgba(0,0,0,0.8)",  // 柔和阴影
                             textAlign: "center",
                             width: "100%",
-                            // uppercase
-                            textTransform: "uppercase",
+                            letterSpacing: "2px",                     // 🆕 增加字间距
+                            lineHeight: "1.5",                        // 🆕 改善行间距
+                            paintOrder: "stroke",                     // 🆕 优化渲染顺序
                           }}
                           key={`scene-${i}-page-${j}-line-${k}`}
                         >

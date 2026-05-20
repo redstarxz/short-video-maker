@@ -38,6 +38,8 @@ export class Config {
   public packageDirPath: string;
   public musicDirPath: string;
   public pexelsApiKey: string;
+  public azureSpeechApiKey: string;
+  public azureSpeechRegion: string;
   public logLevel: pino.Level;
   public whisperVerbose: boolean;
   public port: number;
@@ -75,6 +77,8 @@ export class Config {
     this.musicDirPath = path.join(this.staticDirPath, "music");
 
     this.pexelsApiKey = process.env.PEXELS_API_KEY as string;
+    this.azureSpeechApiKey = process.env.AZURE_SPEECH_API_KEY || "bc5c80cd30c34d7ca7fb8dccafa65c95";
+    this.azureSpeechRegion = process.env.AZURE_SPEECH_REGION || "eastus";
     this.logLevel = (process.env.LOG_LEVEL || defaultLogLevel) as pino.Level;
     this.whisperVerbose = process.env.WHISPER_VERBOSE === "true";
     this.port = process.env.PORT ? parseInt(process.env.PORT) : defaultPort;
@@ -101,11 +105,7 @@ export class Config {
   }
 
   public ensureConfig() {
-    if (!this.pexelsApiKey) {
-      throw new Error(
-        "PEXELS_API_KEY environment variable is missing. Get your free API key: https://www.pexels.com/api/key/ - see how to run the project: https://github.com/gyoridavid/short-video-maker",
-      );
-    }
+
   }
 }
 
